@@ -1,0 +1,54 @@
+
+name: Launch daily pipeline pod
+
+on:
+  schedule:
+    - cron: "30 16 * * *" # 16:30 UTC = 22:00 IST
+
+  workflow_dispatch:
+    inputs:
+      setup_only:
+        description: "TEST: build the environment only, do not run main.py"
+        type: boolean
+        default: false
+
+      gpu_override:
+        description: "TEST: use only this GPU id (e.g. NVIDIA A40). Empty = normal GPU order"
+        type: string
+        default: ""
+
+concurrency:
+  group: runpod-launch
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Launch pod
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_IDS: ${{ secrets.TG_CHAT_IDS }}
+          CONFIG_JSON_B64: ${{ secrets.CONFIG_JSON_B64 }}
+          REPO_REF: ${{ vars.REPO_REF }}
+          BATCH_LIMIT: ${{ vars.BATCH_LIMIT }}
+          WORKER_NAME: ${{ vars.WORKER_NAME }}
+          SETUP_ONLY_INPUT: ${{ inputs.setup_only }}
+          GPU_OVERRIDE: ${{ inputs.gpu_override }}
+
+        run: |
+          ARGS=()
+          if [ "$SETUP_ONLY_INPUT" = "true" ]; then ARGS+=(--setup-only); fi
+          if [ -n "$GPU_OVERRIDE" ]; then ARGS+=(--gpu "$GPU_OVERRIDE"); fi
+          python launcher.py "${ARGS[@]}"
