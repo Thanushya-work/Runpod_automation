@@ -1,0 +1,43 @@
+name: Watch pipeline pods
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"     # every 10 minutes (GitHub may delay runs by several minutes)
+  workflow_dispatch:
+
+concurrency:
+  group: runpod-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      # state.json remembers which alerts were already sent, so you are not spammed
+      - name: Restore watcher state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: watch-state-${{ github.run_id }}
+          restore-keys: watch-state-
+
+      - name: Run watcher
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_IDS: ${{ secrets.TG_CHAT_IDS }}
+        run: python watcher.py
+
+      - name: Save watcher state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: watch-state-${{ github.run_id }}
