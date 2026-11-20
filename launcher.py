@@ -50,11 +50,25 @@ def build_body(gpu_id, name, setup_only):
     }
 
 
-def try_once(client, gpus, name, setup_only):
-    """One pass over the GPUs. Returns the created pod, or None if nothing was available."""
+def resolve_gpu(client, wanted):
+    """Accept a GPU id ('NVIDIA RTX A5000') or display name ('RTX A5000', any case); return the id."""
+    try:
+        gpus = client.catalog_raw(min_cuda=None).json().get("gpus", [])
+    except (RunpodError, ValueError):
+        return wanted
+    w = wanted.strip().lower()
+    for g in gpus:
+        if w in (str(g.get("id", "")).lower(), str(g.get("name", "")).lower()):
+            return g["id"]
+    raise Fatal(f"Unknown GPU '{wanted}'. Use a name/id from: python runpod_client.py --all")
+
+
+def try_once(client, gpus, name, setup_only, explicit=False):
+    """One pass over the GPUs. Returns the created pod, or None if nothing was available.
+    explicit=True (GPU chosen by hand): always attempt it, Runpod itself says if it cannot place it."""
     try:
         stock = client.gpu_stock()
-        candidates = [g for g in gpus if stock.get(g, "NONE") != "NONE"]
+        candidates = [g for g in gpus if explicit or stock.get(g, "NONE") != "NONE"]
     except RunpodError:
         candidates = list(gpus)          # catalog unavailable: just try them all
     for gpu in candidates:
@@ -84,9 +98,12 @@ def main(argv=None):
 
     client = Runpod(os.environ.get("RUNPOD_API_KEY"))
     name = f"{S.NAME_PREFIX}-{datetime.now(IST):%Y%m%d}"
-    gpus = [args.gpu] if args.gpu else S.GPU_PREFERENCE
+    gpus = S.GPU_PREFERENCE
 
     try:
+        if args.gpu:
+            gpus = [resolve_gpu(client, args.gpu)]
+            print("GPU override:", gpus[0])
         existing = [p for p in client.list_pods()
                     if p.get("name", "").startswith(S.NAME_PREFIX) and p.get("status") != "TERMINATED"]
         if existing:
@@ -99,7 +116,7 @@ def main(argv=None):
         deadline = time.time() + S.LAUNCH_GIVE_UP_MINUTES * 60
         first = True
         while True:
-            pod = try_once(client, gpus, name, args.setup_only)
+            pod = try_once(client, gpus, name, args.setup_only, explicit=bool(args.gpu))
             if pod:
                 notify.send(f"🚀 Pipeline pod started: {pod['gpu']['id']} in {pod.get('dataCenterId')} "
                             f"(${pod.get('cost')}/hr), pod id {pod['id']}"

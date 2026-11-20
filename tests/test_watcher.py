@@ -109,3 +109,17 @@ def test_slow_start_alert():
 def test_unreadable_logs_use_start_time_not_instant_alarm():
     # logs unavailable right after start: no alert until the quiet threshold passes
     assert decide(pod(started_min_ago=10), analyze_logs(""), NOW, {}) == []
+
+
+def test_runpod_json_line_stream():
+    """Real Runpod log stream format: SSE 'id:' lines + one JSON record per line."""
+    raw = (
+        'id: 2026-11-19T23:21:40.1Z\n'
+        '{"source":"container","line":"2026-11-19T23:21:40Z ImportError: libc10.so: cannot open shared object file","ts":"2026-11-19T23:21:40.1Z"}\n'
+        'id: 2026-11-19T23:21:47.379136176Z\n'
+        '{"source":"container","line":"2026-11-19T23:21:47Z SETUP_FAILED step=groundingdino-import","ts":"2026-11-19T23:21:47.379136176Z"}\n'
+    )
+    info = analyze_logs(normalize_logs(raw))
+    assert info.setup_failed == "groundingdino-import"
+    assert info.setup_failed_ts == datetime(2026, 11, 19, 23, 21, 47, tzinfo=timezone.utc)
+    assert "libc10.so" in info.tail and "id:" not in info.tail and '"source"' not in info.tail

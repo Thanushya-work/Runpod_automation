@@ -9,7 +9,13 @@ set -uo pipefail
 mkdir -p /workspace
 exec > >(while IFS= read -r line; do printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$line"; done | tee -a /workspace/bootstrap.log) 2>&1
 
-fail() { echo "SETUP_FAILED step=$1"; nvidia-smi || true; df -h /workspace || true; sleep infinity; }
+# Short diagnostics FIRST and the marker LAST, so the watcher's 15-line tail shows the actual error.
+fail() {
+  nvidia-smi --query-gpu=name,driver_version,memory.used,memory.total --format=csv,noheader || true
+  df -h /workspace | tail -n 1 || true
+  echo "SETUP_FAILED step=$1"
+  sleep infinity
+}
 retry() { local n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 3 ] && return 1; echo "retry $n: $*"; sleep 15; done; }
 
 REPO_URL="${REPO_URL:-https://github.com/Thanushya-work/Grounding_Dino.git}"
@@ -61,7 +67,12 @@ fi
 echo "=== 7. final checks ==="
 python -c "import torch; print('torch', torch.__version__, '| cuda', torch.version.cuda, '| gpu visible:', torch.cuda.is_available())" || fail torch-check
 python -c "import torch; assert torch.cuda.is_available()" || fail gpu-not-visible
-python -c "from groundingdino import _C; print('GroundingDINO CUDA extension OK')" || fail groundingdino-import
+# torch must be imported first: _C links against libc10/libtorch, which only torch puts on the loader path.
+python -c "import torch; from groundingdino import _C; print('GroundingDINO CUDA extension OK')" || {
+  echo "--- GroundingDINO build artefacts ---"
+  find /workspace/Grounding_Dino/GroundingDINO -name '_C*.so' 2>/dev/null || true
+  fail groundingdino-import
+}
 df -h /workspace
 echo "SETUP_DONE"
 
