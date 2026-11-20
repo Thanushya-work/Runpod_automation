@@ -13,9 +13,10 @@ GPU_PREFERENCE = [
 MIN_CUDA_VERSION = "12.1"               # host driver must support at least this
 
 # --- Pod shape ----------------------------------------------------------------------
-# Must match requirements.txt of the pipeline (PyTorch 2.5.1 + CUDA 12.1, Python >= 3.10).
-# "devel" image = has nvcc, needed to compile GroundingDINO.
-IMAGE = os.environ.get("POD_IMAGE", "runpod/pytorch:2.5.1-py3.11-cuda12.1.1-devel-ubuntu22.04")
+# CUDA 12.1 "devel" image (has nvcc, needed to compile GroundingDINO), Python 3.10.
+# requirements.txt installs PyTorch 2.5.1+cu121 over the image's own PyTorch, so the image's torch version does not matter.
+# No runpod/pytorch 2.5.1 + cuda12.1 tag exists on Docker Hub: check the tag exists before changing this.
+IMAGE = os.environ.get("POD_IMAGE", "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04")
 CONTAINER_DISK_GB = int(os.environ.get("CONTAINER_DISK_GB", "50"))
 VOLUME_DISK_GB = int(os.environ.get("VOLUME_DISK_GB", "50"))
 MOUNT_PATH = "/workspace"
