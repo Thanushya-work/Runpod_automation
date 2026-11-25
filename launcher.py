@@ -21,12 +21,20 @@ from runpod_client import Runpod, RunpodError
 IST = timezone(timedelta(hours=5, minutes=30))
 
 # Passed from GitHub Secrets / the environment into the pod. Never printed.
-PASS_THROUGH = ["CONFIG_JSON_B64", "TG_BOT_TOKEN", "TG_CHAT_IDS", "TG_CHAT_ID",
+PASS_THROUGH = ["TG_BOT_TOKEN", "TG_CHAT_IDS", "TG_CHAT_ID",
                 "BATCH_LIMIT", "WORKER_NAME", "REPO_URL", "REPO_BRANCH", "REPO_REF"]
 
 
 class Fatal(Exception):
     """A problem that retrying or another GPU cannot fix."""
+
+
+def repo_label():
+    """'AIENGINE-TEST @ Sept_Run'. Stops the launch if either variable is missing."""
+    url, branch = os.environ.get("REPO_URL", "").strip(), os.environ.get("REPO_BRANCH", "").strip()
+    if not url or not branch:
+        raise Fatal("REPO_URL / REPO_BRANCH variable is not set")
+    return f"{url.rstrip('/').split('/')[-1].removesuffix('.git')} @ {branch}"
 
 
 def build_body(gpu_id, name, setup_only):
@@ -96,11 +104,12 @@ def main(argv=None):
     ap.add_argument("--gpu")
     args = ap.parse_args(argv)
 
-    client = Runpod(os.environ.get("RUNPOD_API_KEY"))
     name = f"{S.NAME_PREFIX}-{datetime.now(IST):%Y%m%d}"
     gpus = S.GPU_PREFERENCE
 
     try:
+        label = repo_label()
+        client = Runpod(os.environ.get("RUNPOD_API_KEY"))
         if args.gpu:
             gpus = [resolve_gpu(client, args.gpu)]
             print("GPU override:", gpus[0])
@@ -118,7 +127,7 @@ def main(argv=None):
         while True:
             pod = try_once(client, gpus, name, args.setup_only, explicit=bool(args.gpu))
             if pod:
-                notify.send(f"🚀 Pipeline pod started: {pod['gpu']['id']} in {pod.get('dataCenterId')} "
+                notify.send(f"🚀 Pipeline pod started: {label}, {pod['gpu']['id']} in {pod.get('dataCenterId')} "
                             f"(${pod.get('cost')}/hr), pod id {pod['id']}"
                             + (" [SETUP-ONLY TEST]" if args.setup_only else ""))
                 print("Launched pod", pod["id"])

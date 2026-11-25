@@ -18,8 +18,7 @@ fail() {
 }
 retry() { local n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 3 ] && return 1; echo "retry $n: $*"; sleep 15; done; }
 
-REPO_URL="${REPO_URL:-https://github.com/Thanushya-work/Grounding_Dino.git}"
-REPO_BRANCH="${REPO_BRANCH:-IOU-Dedup}"
+[ -n "${REPO_URL:-}" ] && [ -n "${REPO_BRANCH:-}" ] || fail repo-url-missing
 export HF_HUB_ENABLE_HF_TRANSFER=0 CUDA_HOME=/usr/local/cuda HF_HOME=/workspace/hf_cache
 export DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1
 
@@ -55,14 +54,20 @@ pip install -e . --no-build-isolation --no-deps || fail groundingdino-build
 cd /workspace/Grounding_Dino
 mkdir -p outputs
 
-echo "=== 6. config.json from secret ==="
-if [ -n "${CONFIG_JSON_B64:-}" ]; then
-  echo "$CONFIG_JSON_B64" | base64 -d > config.json || fail config-decode
-  chmod 600 config.json
-  python -c "import json; json.load(open('config.json')); print('config.json written and is valid JSON')" || fail config-invalid
-elif [ -z "${SETUP_ONLY:-}" ]; then
-  fail config-missing
-fi
+echo "=== 6. config.json from the cloned repo ==="
+# Prints ONLY the database and bucket names. Never print any other config value.
+python - <<'EOF' || fail config-missing
+import json
+try:
+    with open("/workspace/Grounding_Dino/config.json") as f:
+        cfg = json.load(f)
+except Exception as e:
+    raise SystemExit(f"config.json missing or not valid JSON: {type(e).__name__}")   # type only, never the content
+for section, key in (("db_config", "database"), ("s3_config", "bucket_name")):
+    part = cfg.get(section) if isinstance(cfg, dict) else None
+    value = part.get(key) if isinstance(part, dict) else None
+    print(f"{section}.{key} = {value if isinstance(value, str) else 'NOT FOUND'}")
+EOF
 
 echo "=== 7. final checks ==="
 python -c "import torch; print('torch', torch.__version__, '| cuda', torch.version.cuda, '| gpu visible:', torch.cuda.is_available())" || fail torch-check
@@ -74,6 +79,7 @@ python -c "import torch; from groundingdino import _C; print('GroundingDINO CUDA
   fail groundingdino-import
 }
 df -h /workspace
+du -sh /workspace
 echo "SETUP_DONE"
 
 if [ -n "${SETUP_ONLY:-}" ]; then
@@ -84,6 +90,7 @@ fi
 echo "=== 8. pipeline ==="
 python -u main.py "${WORKER_NAME:-pod-1}" ${BATCH_LIMIT:-}
 rc=$?
+du -sh /workspace
 echo "PIPELINE_DONE exit=$rc"
 df -h /workspace
 sleep infinity

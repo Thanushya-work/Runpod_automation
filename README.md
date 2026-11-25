@@ -11,7 +11,7 @@ No dedicated pod: it only exists while it works.
 GitHub Actions, 22:00 IST            GitHub Actions, every 10 min          The pod
 launcher.py                          watcher.py                            bootstrap.sh
  - checks which GPU is in stock       - reads the pod's log                 - installs, builds GroundingDINO
- - creates the pod (retries 3 h)      - done OK  -> wait 15 min, delete     - writes config.json from a secret
+ - creates the pod (retries 3 h)      - done OK  -> wait 15 min, delete     - uses config.json from the repo
  - Telegram: "pod started"            - failed   -> alert, delete in 30 min - runs main.py
                                       - log quiet 1.5 h -> alert ONLY       - prints PIPELINE_DONE exit=<code>
                                       - never deletes a slow/quiet pod
