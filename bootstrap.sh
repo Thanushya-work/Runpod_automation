@@ -56,8 +56,9 @@ mkdir -p outputs
 
 echo "=== 6. config.json from the cloned repo ==="
 # Prints ONLY the database and bucket names. Never print any other config value.
-python - <<'EOF' || fail config-missing
-import json
+# Exit 3 = the database is not EXPECTED_DB, so main.py must not run.
+python - <<'EOF'
+import json, os, sys
 try:
     with open("/workspace/Grounding_Dino/config.json") as f:
         cfg = json.load(f)
@@ -67,7 +68,11 @@ for section, key in (("db_config", "database"), ("s3_config", "bucket_name")):
     part = cfg.get(section) if isinstance(cfg, dict) else None
     value = part.get(key) if isinstance(part, dict) else None
     print(f"{section}.{key} = {value if isinstance(value, str) else 'NOT FOUND'}")
+    if key == "database" and (not value or value != os.environ.get("EXPECTED_DB", "").strip()):
+        print("database does not match EXPECTED_DB: stopping before main.py")
+        sys.exit(3)
 EOF
+case $? in 0) ;; 3) fail db-mismatch ;; *) fail config-missing ;; esac
 
 echo "=== 7. final checks ==="
 python -c "import torch; print('torch', torch.__version__, '| cuda', torch.version.cuda, '| gpu visible:', torch.cuda.is_available())" || fail torch-check

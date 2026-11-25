@@ -22,7 +22,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 # Passed from GitHub Secrets / the environment into the pod. Never printed.
 PASS_THROUGH = ["TG_BOT_TOKEN", "TG_CHAT_IDS", "TG_CHAT_ID",
-                "BATCH_LIMIT", "WORKER_NAME", "REPO_URL", "REPO_BRANCH", "REPO_REF"]
+                "BATCH_LIMIT", "WORKER_NAME", "REPO_URL", "REPO_BRANCH", "REPO_REF", "EXPECTED_DB"]
 
 
 class Fatal(Exception):
@@ -109,6 +109,8 @@ def main(argv=None):
 
     try:
         label = repo_label()
+        if not os.environ.get("EXPECTED_DB", "").strip():
+            raise Fatal("EXPECTED_DB variable is not set")
         client = Runpod(os.environ.get("RUNPOD_API_KEY"))
         if args.gpu:
             gpus = [resolve_gpu(client, args.gpu)]

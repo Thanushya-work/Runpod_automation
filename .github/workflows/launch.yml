@@ -42,6 +42,7 @@ jobs:
           TG_CHAT_IDS: ${{ secrets.TG_CHAT_IDS }}
           REPO_URL: ${{ vars.REPO_URL }}
           REPO_BRANCH: ${{ vars.REPO_BRANCH }}
+          EXPECTED_DB: ${{ vars.EXPECTED_DB }}
           REPO_REF: ${{ vars.REPO_REF }}
           BATCH_LIMIT: ${{ vars.BATCH_LIMIT }}
           WORKER_NAME: ${{ vars.WORKER_NAME }}
